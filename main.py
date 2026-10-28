@@ -7,76 +7,72 @@ from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
-# 1. Load environment secrets
 load_dotenv()
 
-# 2. Initialize FastAPI App
 app = FastAPI(title="Jai Bhajarang Mobiles AI Assistant")
 
-# Enable CORS so your website can talk to this backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows requests from any frontend (like Vercel)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 3. Request Data Schema
 class ChatRequest(BaseModel):
     message: str
 
-# 4. Mock Inventory Data
+# Expanded Catalog including common accessories & repairs
 INVENTORY_DATA = [
-    {"name": "Redmi Note 13 Pro Tempered Glass", "category": "screen_guard", "price": 199, "stock": 15},
-    {"name": "iPhone 15 Matte Screen Guard", "category": "screen_guard", "price": 299, "stock": 5},
-    {"name": "Samsung 25W Type-C Original Adapter", "category": "charger", "price": 1299, "stock": 8},
-    {"name": "Boat Type-C Braided Cable 1m", "category": "cable", "price": 249, "stock": 0},
-    {"name": "Doorstep Screen Repair Service", "category": "service", "price": 1499, "stock": 999},
+    {"name": "Redmi Note 13 Pro Tempered Glass", "category": "screen guard tempered glass protector", "price": 199, "stock": 15},
+    {"name": "iPhone 15 Matte Screen Guard", "category": "screen guard tempered glass protector", "price": 299, "stock": 5},
+    {"name": "Wired Earphones (3.5mm / Type-C)", "category": "earphones headphones audio", "price": 249, "stock": 12},
+    {"name": "Wireless Bluetooth Earbuds / Neckband", "category": "earphones bluetooth neckband audio", "price": 899, "stock": 7},
+    {"name": "Samsung 25W Type-C Original Adapter", "category": "charger adapter fast charger", "price": 1299, "stock": 8},
+    {"name": "Boat Type-C Braided Cable 1m", "category": "cable data cable fast charging", "price": 249, "stock": 0},
+    {"name": "Doorstep Screen / Display Replacement", "category": "service repair display screen break", "price": 1499, "stock": 999},
+    {"name": "Battery Replacement Service", "category": "service repair battery charging issue", "price": 999, "stock": 999},
 ]
 
-# 5. Inventory Tool
-# 5. Inventory Tool (Updated to handle partial words and plural terms)
 @tool
 def lookup_shop_catalog(search_query: str) -> str:
     """
-    Search the shop catalog and inventory for accessories, services, prices, and stock levels.
-    Always trigger this tool when a user asks about price, availability, or repair services.
+    Search shop catalog for accessories, audio, chargers, covers, and repair services.
+    Pass translated English search terms (e.g. 'earphones', 'screen replacement', 'tempered glass').
     """
-    # Clean query into individual search tokens (e.g., 'iphone', '15', 'screen')
     words = [w.strip() for w in search_query.lower().replace("?", "").replace(",", "").split() if len(w.strip()) > 1]
     matches = []
     
     for item in INVENTORY_DATA:
         item_text = f"{item['name']} {item['category']}".lower()
-        # If at least half the customer's search words appear in the product name
         matched_words = [w for w in words if w in item_text or w.rstrip("s") in item_text]
         if len(matched_words) >= max(1, len(words) // 2):
-            stock_label = f"{item['stock']} units available" if item["stock"] > 0 else "Currently out of stock"
+            stock_label = f"{item['stock']} in stock" if item["stock"] > 0 else "Currently out of stock"
             matches.append(f"- {item['name']}: Rs.{item['price']} ({stock_label})")
             
     if not matches:
-        return f"No direct catalog match found for '{search_query}'. Inform customer to visit shop counter."
+        return f"No direct catalog match found for '{search_query}'. Inform customer we can arrange it or invite them to visit our shop on Khaman to Bus Stand Road, Karimnagar."
         
     return "\n".join(matches)
-# 6. Initialize LLM with Tools
+
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
-    temperature=0.1
+    temperature=0.2
 )
 llm_with_tools = llm.bind_tools([lookup_shop_catalog])
 
-# 7. Core Query Handler
+SYSTEM_PROMPT = (
+    "You are the virtual assistant for 'Jai Bhajarang Mobiles' located at Khaman to Bus Stand Road, Karimnagar. "
+    "We provide mobile accessories, screen repairs, battery replacement, and doorstep service in Karimnagar. "
+    "LANGUAGE INSTRUCTIONS: "
+    "1. When customers speak in Telugu or romanized Telugu (e.g. 'earphones unaya?', 'display change cheyali', 'cost entha?'), ALWAYS reply politely in friendly Telugu or conversational Telugu-English (e.g., 'Avunu andi, maa daggara earphones unnaayi...'). "
+    "2. Before calling the lookup tool, translate the query keywords to English (e.g. 'unaya earphones' -> 'earphones'). "
+    "3. Keep answers concise, polite, and helpful."
+)
+
 def process_message(user_text: str) -> str:
     messages = [
-        SystemMessage(
-            content=(
-                "You are the virtual shop assistant for 'Jai Bhajarang Mobiles' located in Karimnagar. "
-                "Respond helpfully, politely, and concisely. "
-                "Always check product availability and pricing through your lookup tool before confirming to the customer. "
-                "You understand English, Telugu, and Hinglish queries seamlessly."
-            )
-        ),
+        SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content=user_text)
     ]
 
@@ -99,10 +95,9 @@ def process_message(user_text: str) -> str:
 
     return response.content
 
-# 8. Web API Endpoints
 @app.get("/")
 def home():
-    return {"status": "Online", "shop": "Jai Bhajarang Mobiles AI Assistant"}
+    return {"status": "Online", "shop": "Jai Bhajarang Mobiles"}
 
 @app.post("/api/chat")
 def chat_endpoint(request: ChatRequest):
